@@ -265,13 +265,22 @@ input[type=checkbox]{width:16px!important;height:16px;cursor:pointer;flex-shrink
 
   <!-- 현황 탭 -->
   <div class="page" id="page-status">
-    <div style="padding:12px 0 8px"><p style="font-size:16px;font-weight:500">📊 현황</p></div>
-    <div class="section">
-      <div class="sec-title">오늘 현황</div>
-      <div id="today-status"></div>
+    <div style="padding:12px 0 8px;display:flex;justify-content:space-between;align-items:center">
+      <p style="font-size:16px;font-weight:500">📊 현황</p>
+      <button onclick="loadTodayStatus()" class="btn btn-green" style="padding:6px 12px;font-size:12px">새로고침</button>
     </div>
     <div class="section">
-      <div class="sec-title">이번 달 경비 합계</div>
+      <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
+        날짜별 조회
+        <input type="date" id="status-date" style="width:auto;font-size:12px;padding:4px 8px" onchange="loadDateStatus()">
+      </div>
+      <div id="date-status"></div>
+    </div>
+    <div class="section">
+      <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
+        월별 경비 합계
+        <input type="month" id="status-month" style="width:auto;font-size:12px;padding:4px 8px" onchange="loadMonthStatus()">
+      </div>
       <div id="month-status"></div>
     </div>
   </div>
@@ -427,32 +436,84 @@ function changeMonth(dir){
   loadCalendar();
 }
 
-function showDayPopup(dateStr,records){
-  document.getElementById('popup-title-text').textContent=`📅 ${dateStr}`;
+async function showDayPopup(dateStr,records){
+  document.getElementById('popup-title-text').textContent='📅 '+dateStr;
+  document.getElementById('popup-content').innerHTML='<p style="text-align:center;color:#888;padding:20px">불러오는 중...</p>';
+  document.getElementById('popup').classList.add('show');
+
+  // 상세 경비/장비 내역 조회
+  let expenseMap={}, equipMap={};
+  try {
+    const res=await fetch(SCRIPT_URL+'?action=getSubmitData&date='+encodeURIComponent(dateStr)+'&projNum='+encodeURIComponent(records[0].projNum)).then(r=>r.json());
+    // 여러 현장이면 각각 조회
+  } catch(e){}
+
   let html='';
-  records.forEach(r=>{
+  for(const r of records){
     const expDone=r.expenseConfirmed==='Y';
     const eqDone=r.equipConfirmed==='Y';
     const hasEquip=r.hasEquip==='Y';
-    html+=`<div class="record-card">
-      <div class="record-title">${r.projNum} ${r.projName}</div>
-      <div class="record-row"><span>작업자</span><span>${r.workers} (${r.workerCount}명)</span></div>
-      <div class="record-row"><span>작업시간</span><span>${r.timeRange}</span></div>
-      <div class="record-row"><span>법인카드</span><span>${Number(r.corpTotal||0).toLocaleString()}원</span></div>
-      ${hasEquip?`<div class="record-row"><span>장비/외주</span><span>${Number(r.equipTotal||0).toLocaleString()}원</span></div>`:''}
-      <div class="record-row"><span>작성자</span><span>${r.writer}</span></div>
-      <div class="status-btns">
-        <button class="status-btn ${expDone?'expense-done':'expense-ok'}" onclick="confirmExpense('${dateStr}','${r.projNum}',${expDone})">
-          ${expDone?'✅ 경비확인완료':'💳 경비 확인'}
-        </button>
-        ${hasEquip?`<button class="status-btn ${eqDone?'equip-done':'equip-ok'}" onclick="confirmEquip('${dateStr}','${r.projNum}',${eqDone})">
-          ${eqDone?'✅ 장비결제완료':'🚜 장비 결제'}
-        </button>`:''}
-      </div>
-    </div>`;
-  });
+
+    // 상세 데이터 조회
+    let expenses=[], equips=[];
+    try {
+      const detail=await fetch(SCRIPT_URL+'?action=getSubmitData&date='+encodeURIComponent(dateStr)+'&projNum='+encodeURIComponent(r.projNum)).then(res=>res.json());
+      expenses=detail.expenses||[];
+      equips=detail.equips||[];
+    } catch(e){}
+
+    let expHtml='';
+    if(r.noExpense==='Y'){
+      expHtml='<div style="font-size:11px;color:#888;padding:4px 0">경비 사용 없음</div>';
+    } else if(expenses.length>0){
+      let total=0;
+      expenses.forEach(e=>{
+        total+=Number(e.amount||0);
+        const badge=e.isPersonal?'<span style="font-size:10px;background:#FAEEDA;color:#633806;padding:1px 5px;border-radius:4px">개인</span>':'<span style="font-size:10px;background:#E6F1FB;color:#0C447C;padding:1px 5px;border-radius:4px">법인</span>';
+        expHtml+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid #f0f0f0">'+
+          '<span>'+e.item+' '+badge+'</span>'+
+          '<span style="font-weight:500">'+Number(e.amount||0).toLocaleString()+'원</span></div>';
+      });
+      expHtml+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:#1D9E75;padding:4px 0;margin-top:2px">'+
+        '<span>합계</span><span>'+total.toLocaleString()+'원</span></div>';
+    }
+
+    let eqHtml='';
+    if(equips.length>0){
+      let total=0;
+      equips.forEach(e=>{
+        total+=Number(e.supplyAmt||0);
+        eqHtml+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid #f0f0f0">'+
+          '<span>'+e.type+(e.company?' / '+e.company:'')+'</span>'+
+          '<span style="font-weight:500">'+Number(e.supplyAmt||0).toLocaleString()+'원</span></div>';
+      });
+      eqHtml+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:#185FA5;padding:4px 0;margin-top:2px">'+
+        '<span>합계(공급가)</span><span>'+total.toLocaleString()+'원</span></div>';
+    }
+
+    html+='<div class="record-card">'+
+      '<div class="record-title">'+r.projNum+' '+r.projName+'</div>'+
+      '<div class="record-row"><span>작업자</span><span>'+r.workers+' ('+r.workerCount+'명)</span></div>'+
+      '<div class="record-row"><span>작업시간</span><span>'+r.timeRange+'</span></div>'+
+      '<div class="record-row"><span>작성자</span><span>'+r.writer+'</span></div>';
+
+    if(expHtml){
+      html+='<div style="margin-top:8px;padding-top:8px;border-top:0.5px dashed #eee">'+
+        '<div style="font-size:11px;font-weight:500;color:#888;margin-bottom:4px">💳 경비 내역</div>'+expHtml+'</div>';
+    }
+    if(eqHtml){
+      html+='<div style="margin-top:8px;padding-top:8px;border-top:0.5px dashed #eee">'+
+        '<div style="font-size:11px;font-weight:500;color:#888;margin-bottom:4px">🚜 장비/외주 내역</div>'+eqHtml+'</div>';
+    }
+
+    html+='<div class="status-btns">'+
+      '<button class="status-btn '+(expDone?'expense-done':'expense-ok')+'" onclick="confirmExpense(''+dateStr+'',''+r.projNum+'','+expDone+')">'+
+      (expDone?'✅ 경비확인완료':'💳 경비 확인')+'</button>'+
+      (hasEquip?'<button class="status-btn '+(eqDone?'equip-done':'equip-ok')+'" onclick="confirmEquip(''+dateStr+'',''+r.projNum+'','+eqDone+')">'+
+      (eqDone?'✅ 장비결제완료':'🚜 장비 결제')+'</button>':'')+
+      '</div></div>';
+  }
   document.getElementById('popup-content').innerHTML=html;
-  document.getElementById('popup').classList.add('show');
 }
 
 async function confirmExpense(date,projNum,isDone){
@@ -502,45 +563,57 @@ async function loadUnsubmitted(){
 
 // ========== 현황 ==========
 async function loadTodayStatus(){
+  const today=new Date();
+  // 날짜 입력 초기값 설정
+  document.getElementById('status-date').value=today.toISOString().split('T')[0];
+  document.getElementById('status-month').value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
+  await loadDateStatus();
+  await loadMonthStatus();
+}
+
+async function loadDateStatus(){
+  const val=document.getElementById('status-date').value;
+  if(!val)return;
+  const d=new Date(val+'T00:00:00');
+  const dateStr=d.getFullYear()+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getDate()).padStart(2,'0');
+  const el=document.getElementById('date-status');
+  el.innerHTML='<p style="font-size:12px;color:#888;padding:8px 0">불러오는 중...</p>';
   try {
-    const today=new Date();
-    const dateStr=`${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
-    const res=await fetch(`${SCRIPT_URL}?action=getRecordsByDate&date=${encodeURIComponent(dateStr)}`).then(r=>r.json());
-    const el=document.getElementById('today-status');
-    if(!res.data||res.data.length===0){el.innerHTML=`<p style="font-size:13px;color:#888;padding:8px 0">오늘 제출된 작업일보가 없어요</p>`;return;}
-    let html='';
-    let total=0;
+    const res=await fetch(SCRIPT_URL+'?action=getRecordsByDate&date='+encodeURIComponent(dateStr)).then(r=>r.json());
+    if(!res.data||res.data.length===0){
+      el.innerHTML='<p style="font-size:13px;color:#888;padding:8px 0">'+dateStr+' 제출된 작업일보가 없어요</p>';return;
+    }
+    let html='';let total=0;
     res.data.forEach(r=>{
       total+=Number(r.totalAmt||0);
-      html+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid #eee;font-size:12px">
-        <span>${r.projName}</span><span style="font-weight:500">${Number(r.totalAmt||0).toLocaleString()}원</span>
-      </div>`;
+      html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid #eee;font-size:12px;cursor:pointer" onclick="switchTab('cal')">'+
+        '<span>'+r.projNum+' '+r.projName+'</span>'+
+        '<span style="font-weight:500">'+Number(r.totalAmt||0).toLocaleString()+'원</span></div>';
     });
-    html+=`<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:500;color:#1D9E75">
-      <span>합계</span><span>${total.toLocaleString()}원</span>
-    </div>`;
+    html+='<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:500;color:#1D9E75">'+
+      '<span>합계 ('+res.data.length+'개 현장)</span><span>'+total.toLocaleString()+'원</span></div>';
     el.innerHTML=html;
+  } catch(e){el.innerHTML='<p style="font-size:12px;color:#888;padding:8px 0">불러오지 못했어요</p>';}
+}
 
-    // 이번 달 합계
-    const monthStr=`${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}`;
-    const mres=await fetch(`${SCRIPT_URL}?action=getMonthTotal&month=${encodeURIComponent(monthStr)}`).then(r=>r.json());
-    const mel=document.getElementById('month-status');
+async function loadMonthStatus(){
+  const val=document.getElementById('status-month').value;
+  if(!val)return;
+  const parts=val.split('-');
+  const monthStr=parts[0]+'.'+parts[1];
+  const mel=document.getElementById('month-status');
+  mel.innerHTML='<p style="font-size:12px;color:#888;padding:8px 0">불러오는 중...</p>';
+  try {
+    const mres=await fetch(SCRIPT_URL+'?action=getMonthTotal&month='+encodeURIComponent(monthStr)).then(r=>r.json());
     if(mres.data){
-      mel.innerHTML=`
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-          <span>법인카드</span><span>${Number(mres.data.corp||0).toLocaleString()}원</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-          <span>개인카드</span><span>${Number(mres.data.personal||0).toLocaleString()}원</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-          <span>장비/외주</span><span>${Number(mres.data.equip||0).toLocaleString()}원</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:500;color:#1D9E75;border-top:0.5px solid #eee;margin-top:4px">
-          <span>총 합계</span><span>${Number(mres.data.total||0).toLocaleString()}원</span>
-        </div>`;
+      mel.innerHTML=
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span>법인카드</span><span>'+Number(mres.data.corp||0).toLocaleString()+'원</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span>개인카드</span><span>'+Number(mres.data.personal||0).toLocaleString()+'원</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span>장비/외주</span><span>'+Number(mres.data.equip||0).toLocaleString()+'원</span></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:500;color:#1D9E75;border-top:0.5px solid #eee;margin-top:4px">'+
+        '<span>총 합계</span><span>'+Number(mres.data.total||0).toLocaleString()+'원</span></div>';
     }
-  } catch(e){}
+  } catch(e){mel.innerHTML='<p style="font-size:12px;color:#888;padding:8px 0">불러오지 못했어요</p>';}
 }
 
 // ========== 대리 작성 ==========
