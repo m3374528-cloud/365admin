@@ -115,36 +115,8 @@ input[type=checkbox]{width:16px!important;height:16px;cursor:pointer;flex-shrink
   <div class="loading-text" id="loading-text">불러오는 중...</div>
 </div>
 
-<!-- 로그인 화면 -->
-<div class="login-wrap" id="login-wrap">
-  <div class="login-box">
-    <div class="login-title">🔐 365 관리자</div>
-    <div class="login-sub">비밀번호를 입력해주세요</div>
-    <div class="pin-wrap">
-      <div class="pin-dot" id="dot-0"></div>
-      <div class="pin-dot" id="dot-1"></div>
-      <div class="pin-dot" id="dot-2"></div>
-      <div class="pin-dot" id="dot-3"></div>
-    </div>
-    <div class="keypad">
-      <button class="key" onclick="pressKey('1')">1</button>
-      <button class="key" onclick="pressKey('2')">2</button>
-      <button class="key" onclick="pressKey('3')">3</button>
-      <button class="key" onclick="pressKey('4')">4</button>
-      <button class="key" onclick="pressKey('5')">5</button>
-      <button class="key" onclick="pressKey('6')">6</button>
-      <button class="key" onclick="pressKey('7')">7</button>
-      <button class="key" onclick="pressKey('8')">8</button>
-      <button class="key" onclick="pressKey('9')">9</button>
-      <button class="key" onclick="pressKey('0')" style="grid-column:2">0</button>
-      <button class="key key-del" onclick="pressDelete()">⌫</button>
-    </div>
-    <div class="login-err" id="login-err"></div>
-  </div>
-</div>
-
 <!-- 관리자 메인 -->
-<div id="admin-wrap" style="display:none">
+<div id="admin-wrap">
   <div class="tab-bar">
     <div class="tab on" id="tab-cal" onclick="switchTab('cal')">📅 달력</div>
     <div class="tab" id="tab-unsub" onclick="switchTab('unsub')">⚠️ 미제출</div>
@@ -299,42 +271,15 @@ input[type=checkbox]{width:16px!important;height:16px;cursor:pointer;flex-shrink
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbzNI4xmJT7kaA06gosQ2BE6kg8i5i1M-z_4tq3jsr32-nftkN0sH86ox9xEmVo0oe9IoQ/exec';
-const PIN='1234'; // 비밀번호 (변경 가능)
-let pinInput='';
+
 let masterData={projects:[],workers:[],cards:[],expenseItems:[],equipments:[]};
 let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let calData={};
 let wExpCount=0,wEqCount=0;
 
-// ========== 로그인 ==========
-function pressKey(k){
-  if(pinInput.length>=4)return;
-  pinInput+=k;
-  updateDots();
-  if(pinInput.length===4)checkPin();
-}
-function pressDelete(){
-  pinInput=pinInput.slice(0,-1);
-  updateDots();
-  document.getElementById('login-err').textContent='';
-}
-function updateDots(){
-  for(let i=0;i<4;i++){
-    document.getElementById('dot-'+i).classList.toggle('filled',i<pinInput.length);
-  }
-}
-function checkPin(){
-  if(pinInput===PIN){
-    document.getElementById('login-wrap').style.display='none';
-    document.getElementById('admin-wrap').style.display='block';
-    initAdmin();
-  } else {
-    document.getElementById('login-err').textContent='비밀번호가 틀렸습니다';
-    pinInput='';
-    updateDots();
-  }
-}
+// 로그인 없이 바로 시작
+window.onload = function(){ initAdmin(); }
 
 // ========== 초기화 ==========
 async function initAdmin(){
